@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use macroquad::prelude::*;
 
 use noise::{NoiseFn, Perlin, Seedable};
@@ -5,20 +7,65 @@ use noise::{NoiseFn, Perlin, Seedable};
 
 use std::collections::HashMap;
 
-// use crate::Game;
-//
+use crate::Game;
+
+impl Game {
+    pub(crate) fn load_nearby_chunks(&mut self) {
+    }
+}
+
 type ChunkPos = (i32, i32);
 
-struct World {
-    chunks_map: HashMap<ChunkPos, Chunk>,
+pub struct World {
+    chunks: HashMap<ChunkPos, Chunk>,
     loaded_chunks: Vec<Chunk>,
-    seed: String,
+    seed: u32,
 }
 
 impl World {
-    fn seed_as_int(&self) -> u32 {
+    pub fn new(seed_opt: Option<&str>) -> Self {
+        let chunks        = HashMap::new();
+        let loaded_chunks = Vec::new();
+        let seed: u32     = match seed_opt {
+            Some(seed_str) => Self::seed_as_int(seed_str),
+            None => rand::gen_range(0, u32::max_value()),
+        };
+
+        Self {
+            chunks,
+            loaded_chunks,
+            seed,
+        }
+    }
+
+    // pub fn index(&self, x: i32, y: i32, z: i32) -> Result<&Block, Box<dyn Err>> {
+    //     let chunk_x = x / 24;
+    //     let chunk_y = y / 24;
+    //     let chunk_pos = (chunk_x, chunk_y);
+    //
+    //     match self.chunks.get(&chunk_pos) {
+    //         Some(block) => Ok(block),
+    //         None        => Err("Block is not yet generated!"),
+    //     };
+    // }
+    //
+    // pub fn index_mut(x: i32, y: i32, z: i32) -> &mut Block {
+    //     let chunk_x = x / 24;
+    //     let chunk_y = y / 24;
+    //     let chunk_pos = (chunk_x, chunk_y);
+    //
+    //     match self.chunks.get(&chunk_pos) {
+    //         Some(chunk) => {
+    //
+    //         },
+    //         None        => Err("Block is not yet generated!"),
+    //     };
+    //
+    // }
+
+    fn seed_as_int(seed: &str) -> u32 {
         let mut val: u32 = 0;
-        for b in self.seed.clone().as_bytes() {
+        for b in seed.clone().as_bytes() {
             val += *b as u32;
         }
 
@@ -26,7 +73,7 @@ impl World {
     }
 
     fn generate_chunk(&mut self, chunk_x: i32, chunk_y: i32) {
-        let perlin = Perlin::new(self.seed_as_int());
+        let perlin = Perlin::new(self.seed);
 
         warn!("Fix: use mesh!");
         let chunk = Chunk { blocks: Vec::new() };
@@ -45,16 +92,17 @@ impl World {
             }
         }
 
-        self.chunks_map.insert((chunk_x, chunk_y), chunk);
+        self.chunks.insert((chunk_x, chunk_y), chunk);
     }
 
     fn load_or_gen(&mut self, chunk_x: i32, chunk_y: i32) -> &Chunk {
-        if let Some(chunk) = self.chunks_map.get(&(chunk_x, chunk_y)) {
-            return chunk;
-        };
+        let chunk_pos = (chunk_x, chunk_y);
 
-        self.generate_chunk(chunk_x, chunk_y);
-        match self.chunks_map.get(&(chunk_x, chunk_y)) {
+        if self.chunks.contains_key(&chunk_pos) {
+            self.generate_chunk(chunk_x, chunk_y);
+        }
+
+        match self.chunks.get(&chunk_pos) {
             Some(chunk) => return chunk,
             _ => panic!("Unable to generate chunk x: {chunk_x}, y: {chunk_y}")
         }
@@ -62,7 +110,7 @@ impl World {
 }
 
 #[derive(Debug, Clone)]
-struct Chunk {
+pub struct Chunk {
     blocks: Vec<Block>,
     // mesh:   Option<Mesh>
 }
@@ -71,7 +119,7 @@ impl Chunk {
 }
 
 #[derive(Debug, Clone)]
-struct Block {
+pub struct Block {
     color: Color,
     position: Vec3,
 }

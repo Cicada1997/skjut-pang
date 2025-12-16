@@ -3,6 +3,7 @@ use hecs;
 use hecs::Entity as EntityId;
 
 mod systems;
+use systems::world_generation;
 
 mod components;
 use components::physics::PhysicsObject;
@@ -14,6 +15,7 @@ pub fn color_u8(r: f32, g: f32, b: f32, a: f32) -> Color {
 
 pub struct Game {
     ecs: hecs::World,
+    world: world_generation::World,
     camera: Camera3D,
 
     player_id: EntityId,
@@ -27,6 +29,8 @@ impl Game {
     pub fn new() -> Self {
         let mut ecs        = hecs::World::new();
 
+        let world          = world_generation::World::new(None);
+
         let world_up       = vec3(0.0, 1.0, 0.0);
 
         let player         = PhysicsObject::new(world_up, None);
@@ -38,7 +42,8 @@ impl Game {
         let running        = false;
         let grabbed        = false;
 
-        Self { ecs, camera, player_id, running, grabbed }
+
+        Self { ecs, world, camera, player_id, running, grabbed }
     }
 
     fn setup(&mut self) {
