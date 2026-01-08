@@ -10,6 +10,8 @@ pub struct PhysicsObject {
     pub pitch: f32,
 
     pub world_up: Vec3,
+
+    pub on_ground: bool,
 }
 
 impl PhysicsObject {
@@ -24,8 +26,9 @@ impl PhysicsObject {
         };
 
         let size = vec3(1.0,1.0, 1.0);
+        let on_ground = false;
 
-        Self { pos, size, yaw, pitch, world_up }
+        Self { pos, size, yaw, pitch, world_up, on_ground }
     }
 
     pub(crate) fn center_camera(&self, camera: &mut Camera3D) {

@@ -1,211 +1,159 @@
-use std::error::Error;
-
+use std::{error::Error};
 use macroquad::prelude::*;
-
-use noise::{NoiseFn, Perlin, Seedable};
-
-
+use noise::{NoiseFn, Perlin};
 use std::collections::HashMap;
 
-use crate::Game; 
-use crate::components::physics::PhysicsObject;
-use crate::systems::render::ENTITY_RENDER_DISTANCE;
+pub mod chunk;
+use chunk::{Chunk, Block};
 
-pub static RENDER_DISTANCE: i32 = 2;
-pub static CHUNK_SIZE:      i32 = 24;
-pub static WORLD_HEIGHT:    i32 = 64;
-
-pub fn chunk_pos_relative(x: i32, y: i32) -> ((i32, i32), (i32, i32)) {
-    let chunk_x = x / CHUNK_SIZE;
-    let chunk_y = y / CHUNK_SIZE;
-    let chunk_pos = (chunk_x, chunk_y);
-    let local_pos = (x - CHUNK_SIZE*chunk_x, y - CHUNK_SIZE*chunk_y);
-
-    return (chunk_pos, local_pos);
-}
-
-pub type ChunkPos = (i32, i32);
-
-impl Game {
-    pub(crate) fn load_nearby_chunks(&mut self) -> Vec<ChunkPos> {
-        let (cnk_x, cnk_y) = {
-            let p = self.ecs.get::<&PhysicsObject>(self.player_id).unwrap();
-            let (mut p_chunk_pos, _p_chunk_local) = chunk_pos_relative(p.pos.x as i32, p.pos.y as i32);
-
-            p_chunk_pos.0 += RENDER_DISTANCE;
-            p_chunk_pos.1 += RENDER_DISTANCE;
-
-            p_chunk_pos
-        };
-
-        dbg!(cnk_x);
-        dbg!(cnk_y);
-
-        let mut chunks = Vec::new();
-
-        for x in -cnk_x..cnk_x {
-            for y in -cnk_y..cnk_y {
-                let p = self.ecs.get::<&PhysicsObject>(self.player_id).unwrap();
-                if vec2((x + CHUNK_SIZE / 2) as f32, (y + CHUNK_SIZE / 2) as f32).distance(vec2(p.pos.x, p.pos.y)) > ENTITY_RENDER_DISTANCE { continue; }
-
-                let _ = self.world.load_or_gen(x*CHUNK_SIZE, y*CHUNK_SIZE);
-
-                chunks.push((x, y));
-            }
-        }
-
-        return chunks;
-    }
-
-}
-
-// type ChunkPos = (i32, i32);
+pub const CHUNK_SIZE: u32 = 16;
+pub const WORLD_HEIGHT: usize = 64;
+pub const RENDER_DISTANCE: u32 = 8;
 
 pub struct World {
     pub chunks: HashMap<(i32, i32), Chunk>,
-    pub loaded_chunks: Vec<ChunkPos>,
     pub seed: u32,
+    perlin: Perlin,
 }
 
 impl World {
-    pub fn new(seed_opt: Option<&str>) -> Self {
-        let chunks        = HashMap::new();
-        let loaded_chunks = Vec::new();
-        let seed: u32     = match seed_opt {
-            Some(seed_str) => Self::seed_as_int(seed_str),
-            None => rand::gen_range(0, u32::max_value()),
-        };
-
-        Self {
-            chunks,
-            loaded_chunks,
-            seed,
-        }
+    pub fn new(seed: u32) -> Self {
+        Self { chunks: HashMap::new(), seed, perlin: Perlin::new(seed) }
     }
 
-    pub fn index(&self, x: i32, y: i32, z: i32) -> Result<usize, Box<dyn Error>> {
-        let chunk_x = x / CHUNK_SIZE;
-        let chunk_y = y / CHUNK_SIZE;
-        // let chunk_pos = (chunk_x, chunk_y);
-        let local_pos = (x - CHUNK_SIZE*chunk_x, y - CHUNK_SIZE*chunk_y);
-
-        let index = local_pos.0 + local_pos.1 * CHUNK_SIZE + z * CHUNK_SIZE.pow(2);
-        return Ok(index as usize);
-        // match self.chunks.get(&chunk_pos) {
-        //     Some(_chunk) => {
-        //     }
-        //
-        //     None => return Err("Block is not yet generated!".into()),
-        // }
-    }
-
-    pub fn fetch_block<'a>(&self, chunk: &'a Chunk, x: i32, y: i32, z: i32) -> Result<&'a Block, Box<dyn Error>> {
-        let index = self.index(x, y, z)?;
-
-        match chunk.blocks.get(index) {
-            Some(block) => {
-                return Ok(block);
-            }
-
-            None => return Err("Block is not yet generated!".into()),
-        }
-    }
-
-    // pub fn fetch_block_mut<'a>(&mut self, chunk: &'a Chunk, x: i32, y: i32, z: i32) -> Result<&'a mut Block, Box<dyn Error>> {
-    //     let index = self.index(x, y, z)?;
+    // pub fn linearize_pos(pos: [u8; 3]) -> u32 {
+    //     let x = pos[0];
+    //     let y = pos[1];
+    //     let z = pos[2];
     //
-    //     match chunk.blocks.get_mut(index) {
-    //         Some(block) => {
-    //             return Ok(block);
-    //         }
+    //     let idx = x as u32 + (z as u32 * CHUNK_SIZE) + (y as u32 * CHUNK_SIZE.pow(2));
     //
-    //         None => return Err("Block is not yet generated!".into()),
-    //     }
+    //     idx
     // }
 
-    pub fn index_mut(&mut self, x: i32, y: i32, z: i32) -> Result<&mut Block, Box<dyn Error>> {
-        let chunk_x = x / CHUNK_SIZE;
-        let chunk_y = y / CHUNK_SIZE;
-        let chunk_pos = (chunk_x, chunk_y);
-        let local_pos = (x - CHUNK_SIZE*chunk_x, y - CHUNK_SIZE*chunk_y);
+    pub fn generate_chunk(&mut self, cx: i32, cz: i32) -> Result<(), Box<dyn Error>> {
+        let mut chunk = Chunk::new(cx, cz);
+        
+        for x in 0..CHUNK_SIZE as u8 {
+            for z in 0..CHUNK_SIZE as u8 {
+                let wx = (cx * CHUNK_SIZE as i32 + x as i32) as f64;
+                let wz = (cz * CHUNK_SIZE as i32 + z as i32) as f64;
+                
+                let noise_val = self.perlin.get([wx * 0.020, wz * 0.020]);
+                let height = ((noise_val + 1.0) * 0.5 * (WORLD_HEIGHT as f64 / 2.0)) as u8;
+                // let height = (noise_val * WORLD_HEIGHT as f64) as u32;
 
-        match self.chunks.get_mut(&chunk_pos) {
-            Some(chunk) => {
-
-                let index = local_pos.0 + local_pos.1 * CHUNK_SIZE + z * CHUNK_SIZE.pow(2);
-                if let Some(block) = chunk.blocks.get_mut(index as usize) {
-                    return Ok(block);
-                }
-
-                return Err("could not find block".into())
-            }
-
-            None => return Err("Block is not yet generated!".into()),
-        };
-
-    }
-
-    fn seed_as_int(seed: &str) -> u32 {
-        let mut val: u32 = 0;
-        for b in seed.as_bytes() {
-            val += *b as u32;
-        }
-
-        return val;
-    }
-
-    fn generate_chunk(&mut self, chunk_x: i32, chunk_y: i32) {
-        let perlin = Perlin::new(self.seed);
-
-        warn!("Fix: use mesh!");
-        let mut chunk = Chunk { blocks: Vec::new() };
-
-        for x in chunk_x..chunk_x+CHUNK_SIZE {
-            for y in 0..WORLD_HEIGHT {
-                for z in chunk_y..chunk_y+CHUNK_SIZE {
-                    let _val = perlin.get([x as f64, y as f64, z as f64]);
-
-                    let block = Block { color: GREEN, position: vec3( x as f32, y as f32, z as f32) };
-
-                    // let index = self.index(x, y, z).unwrap();
-
-                    chunk.blocks.push(block);
+                for y in 0..WORLD_HEIGHT as u8 {
+                    // let idx = Self::linearize_pos([x, y, z]);
+                    chunk.blocks[x as usize][y as usize][z as usize] = 
+                    if y == height.saturating_sub(1) {
+                        Block(1)
+                    } else if y < height {
+                        Block(2)
+                    } else {
+                        Block(0)
+                    };
                 }
             }
         }
-
-        self.chunks.insert((chunk_x, chunk_y), chunk);
+        
+        chunk.rebuild_mesh();
+        self.chunks.insert((cx, cz), chunk);
+        Ok(())
     }
 
-    fn load_or_gen(&mut self, chunk_x: i32, chunk_y: i32) -> Result<&Chunk, Box<dyn Error>> {
-        let chunk_pos = (chunk_x, chunk_y);
-
-        if !self.chunks.contains_key(&chunk_pos) {
-            info!("generating chunk...");
-            self.generate_chunk(chunk_x, chunk_y);
-            info!("chunk generated!");
-        }
-
-        match self.chunks.get(&chunk_pos) {
-            Some(chunk) => {
-                Ok(chunk)
-            },
-            _ => panic!("Unable to generate chunk x: {chunk_x}, y: {chunk_y}")
+    pub fn load_or_gen(&mut self, cx: i32, cz: i32) {
+        if !self.chunks.contains_key(&(cx, cz)) {
+            match self.generate_chunk(cx, cz) {
+                Ok(()) => {},
+                Err(e) => {
+                    eprint!("{}", e);
+                },
+            }
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Chunk {
-    pub blocks: Vec<Block>,
-    // mesh:   Option<Mesh>
+/* 
+use std::error::Error;
+
+use macroquad::prelude::*;
+use noise::{NoiseFn, Perlin};
+use std::collections::HashMap;
+
+
+pub mod chunk;
+use chunk::Chunk;
+
+pub const CHUNK_SIZE: i32 = 16; // Using power of 2 is better for performance
+pub const WORLD_HEIGHT: usize = 64;
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum BlockType {
+    Air,
+    Dirt,
+    Grass,
 }
 
-impl Chunk {
+pub struct World {
+    pub chunks: HashMap<(i32, i32), Chunk>,
+    pub seed: u32,
+    perlin: Perlin,
 }
 
-#[derive(Debug, Clone)]
-pub struct Block {
-    pub color: Color,
-    pub position: Vec3,
+impl World {
+    pub fn new(seed: u32) -> Self {
+        Self {
+            chunks: HashMap::new(),
+            seed,
+            perlin: Perlin::new(seed),
+        }
+    }
+
+    pub fn generate_chunk(&mut self, cx: i32, cz: i32) -> Result<(), Box<dyn Error>> {
+        let mut chunk = Chunk::new();
+        
+        for x in 0..CHUNK_SIZE as usize {
+            for z in 0..CHUNK_SIZE as usize {
+                let wx = (cx * CHUNK_SIZE as i32 + x as i32) as f64;
+                let wz = (cz * CHUNK_SIZE as i32 + z as i32) as f64;
+                
+                let noise_val = self.perlin.get([wx * 0.1, wz * 0.1]);
+                let height = ((noise_val + 1.0) * 0.5 * (WORLD_HEIGHT as f64 / 2.0)) as usize;
+
+                for y in 0..WORLD_HEIGHT {
+                    chunk.blocks[x][y][z] = if y == height.checked_sub(1).ok_or("str")? { 
+                        // BlockType::Grass 
+                        1
+                    } else {
+                        // BlockType::Dirt 
+                        2
+                    };
+                }
+            }
+        }
+        chunk.rebuild_mesh((cx, cz));
+        self.chunks.insert((cx, cz), chunk);
+
+        return Ok(());
+    }
+
+    pub fn load_or_gen(&mut self, cx: i32, cz: i32) {
+        if self.chunks.contains_key(&(cx, cz)) {
+            return;
+        }
+
+        let _ = self.generate_chunk(cx, cz);
+    }
+
+    pub fn render(&self) {
+        for chunk in self.chunks.values() {
+            println!("rendering chunk..");
+            if let Some(mesh) = &chunk.mesh {
+                println!("mesh drawn.");
+                draw_mesh(mesh);
+            }
+        }
+    }
 }
+*/

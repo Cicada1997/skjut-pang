@@ -7,8 +7,8 @@ use crate::{ set_camera, get_frame_time };
 use crate::components::physics::PhysicsObject;
 
 static MOUSE_SENSATIVITY:  f32 = 100.2;
-static CAMERA_SENSATIVITY: f32 = 0.04;
-static MOVEMENT_SPEED:     f32 = 6.2;
+static CAMERA_SENSATIVITY: f32 = 1.4;
+static MOVEMENT_SPEED:     f32 = 9.0;
 
 impl Game {
     pub(crate) fn player_updates(&mut self) {
@@ -30,22 +30,30 @@ impl Game {
                 let front = player.front();
                 let flat_front = vec3(front.x, 0.0, front.z);
 
+                let mut speed = MOVEMENT_SPEED;
+                let sprint_speed = 5.75 * MOVEMENT_SPEED;
+
+                if is_key_down(KeyCode::LeftShift) {
+                    speed = sprint_speed;
+                } else {
+                    speed = MOVEMENT_SPEED
+                }
 
                 // Player Movement
                 if is_key_down(KeyCode::W) {
-                    player.pos += flat_front * delta * MOVEMENT_SPEED;
+                    player.pos += flat_front * delta * speed;
                 }
 
                 if is_key_down(KeyCode::S) {
-                    player.pos -= flat_front * delta * MOVEMENT_SPEED;
+                    player.pos -= flat_front * delta * speed;
                 }
 
                 if is_key_down(KeyCode::A) {
-                    player.pos -= player.right() * delta * MOVEMENT_SPEED;
+                    player.pos -= player.right() * delta * speed;
                 }
 
                 if is_key_down(KeyCode::D) {
-                    player.pos += player.right() * delta * MOVEMENT_SPEED;
+                    player.pos += player.right() * delta * speed;
                 }
 
                 
@@ -61,19 +69,19 @@ impl Game {
 
                 // Camera Movement
                 if is_key_down(KeyCode::Up) {
-                    player.pitch += CAMERA_SENSATIVITY;
+                    player.pitch += delta * CAMERA_SENSATIVITY;
                 }
 
                 if is_key_down(KeyCode::Down) {
-                    player.pitch -= CAMERA_SENSATIVITY;
+                    player.pitch -= delta * CAMERA_SENSATIVITY;
                 }
 
                 if is_key_down(KeyCode::Left) {
-                    player.yaw -= CAMERA_SENSATIVITY;
+                    player.yaw -= delta * CAMERA_SENSATIVITY;
                 }
 
                 if is_key_down(KeyCode::Right) {
-                    player.yaw += CAMERA_SENSATIVITY;
+                    player.yaw += delta * CAMERA_SENSATIVITY;
                 }
 
                 player.yaw   -= mouse_delta.x * delta * MOUSE_SENSATIVITY;

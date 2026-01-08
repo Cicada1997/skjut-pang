@@ -1,3 +1,5 @@
+use std::env::args;
+
 use macroquad::prelude::*;
 use hecs;
 use hecs::Entity as EntityId;
@@ -20,30 +22,49 @@ pub struct Game {
 
     player_id: EntityId,
 
+    fps_stats: Vec<i32>,
+
     // State
     running: bool,
     grabbed: bool,
+
+    last_render_cpos: Vec2,
+}
+
+pub fn radian(deg: f32) -> f32 {
+    deg * std::f32::consts::PI / 180.0
 }
 
 impl Game {
     pub fn new() -> Self {
         let mut ecs        = hecs::World::new();
 
-        let world          = world_generation::World::new(None);
+        let seed           = match args().nth(1) {
+            Some(seed_str) => seed_str.parse::<u32>().unwrap(),
+            None           => 2,
+        };
+
+        let world          = world_generation::World::new(seed);
 
         let world_up       = vec3(0.0, 1.0, 0.0);
 
         let player         = PhysicsObject::new(world_up, None);
-        let camera         = Camera3D::default();
+        let camera         = Camera3D {
+            fovy: radian(110.),
+            ..Default::default()
+        };
 
 
         let player_id      = ecs.spawn((player,));
 
+        let fps_stats      = Vec::new();
+
         let running        = false;
-        let grabbed        = false;
+        let grabbed        = true;
 
+        let last_render_cpos = Vec2::new(0., 0.);
 
-        Self { ecs, world, camera, player_id, running, grabbed }
+        Self { ecs, world, camera, player_id, fps_stats, running, grabbed, last_render_cpos }
     }
 
     fn setup(&mut self) {
